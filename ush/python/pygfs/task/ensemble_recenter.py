@@ -4,6 +4,8 @@ from logging import getLogger
 from pygfs.task.analysis import Analysis
 from pygfs.jedi import Jedi
 from typing import Dict, Any
+import os
+import shutil
 from wxflow import AttrDict, FileHandler, parse_j2yaml, logit
 
 logger = getLogger(__name__.split('.')[-1])
@@ -75,7 +77,11 @@ class EnsembleRecenter(Analysis):
 
         # Stage files from COM
         logger.info(f"Staging files from COM")
-        FileHandler(self.task_config.data_in).sync()
+        # ECEN_LINK_INPUTS=YES stages the read-only inputs as symlinks instead of copies
+        data_in = dict(self.task_config.data_in)
+        if str(self.task_config.get('ECEN_LINK_INPUTS', 'NO')).upper() == 'YES' and 'copy_req' in data_in:
+            data_in['link_req'] = data_in.pop('copy_req')
+        FileHandler(data_in).sync()
 
         # Initialize JEDI ensemble increment recentering application
         logger.info(f"Initializing JEDI applications")
@@ -122,4 +128,14 @@ class EnsembleRecenter(Analysis):
 
         # Save output files to COM
         logger.info(f"Saving output files to COM")
-        FileHandler(self.task_config.data_out).sync()
+        # ECEN_MOVE_OUTPUTS=YES moves the outputs into COM (rename on the same file system)
+        if str(self.task_config.get('ECEN_MOVE_OUTPUTS', 'NO')).upper() == 'YES':
+            for src, dst in self.task_config.data_out.get('copy_req', []):
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                try:
+                    os.replace(src, dst)
+                except OSError:
+                    shutil.copy2(src, dst)
+                logger.info(f"Moved {src} to {dst}")
+        else:
+            FileHandler(self.task_config.data_out).sync()
