@@ -250,6 +250,8 @@ class Jedi:
         except Exception as e:
             raise WorkflowException(f"An error occurred while rendering JCB template for algorithm {algorithm}:\n{e}") from e
 
+        check_crtm_absorber_order(exe_config)
+
         return exe_config
 
     @logit(logger)
@@ -604,3 +606,21 @@ def find_value_in_nested_dict(nested_dict: Dict, target_key: str) -> Any:
 
     logger.info(f"Key '{target_key}' not found in the nested dictionary")
     return None
+
+
+def check_crtm_absorber_order(config: Any) -> None:
+    """Raise if a CRTM linear obs operator Absorbers list is not a leading prefix of the nonlinear list"""
+    if isinstance(config, dict):
+        lin = config.get('linear obs operator')
+        if config.get('name') == 'CRTM' and isinstance(lin, dict) and 'Absorbers' in lin:
+            nl = list(config.get('Absorbers', []))
+            ln = list(lin['Absorbers'])
+            if nl[:len(ln)] != ln:
+                sensor = config.get('obs options', {}).get('Sensor_ID', 'unknown')
+                raise WorkflowException(f"CRTM {sensor}: linear Absorbers {ln} must match the leading "
+                                        f"entries of nonlinear Absorbers {nl}")
+        for v in config.values():
+            check_crtm_absorber_order(v)
+    elif isinstance(config, list):
+        for v in config:
+            check_crtm_absorber_order(v)
