@@ -473,13 +473,14 @@ class Jedi:
             for obsbiasout_suffix in [self.jcb_config[f"{self.component}_obsbiasout_suffix"],
                                       self.jcb_config[f"{self.component}_obsbiascovout_suffix"]]:
                 satfile_name = os.path.join(self.jcb_config[f"{self.component}_obsbiasout_prefix"] + ob + obsbiasout_suffix)
-                obsbiasin_file = os.path.join(obsbiasin_path, satfile_name)
+                # input files carry the previous cycle's prefix
+                obsbiasin_file = os.path.join(obsbiasin_path, self.jcb_config[f"{self.component}_obsbiasin_prefix"] + ob + obsbiasout_suffix)
                 obsbiasout_file = os.path.join(obsbiasout_path, satfile_name)
                 if os.path.exists(obsbiasout_file):
-                    satlist.append(obsbiasout_file)
+                    satlist.append((obsbiasout_file, satfile_name))
                 elif os.path.exists(obsbiasin_file):
-                    logger.warning(f"{satfile_name} does not exist in {obsbiasout_path} and will be taken from {obsbiasin_path}")
-                    satlist.append(obsbiasin_file)
+                    logger.warning(f"{satfile_name} does not exist in {obsbiasout_path}; carrying forward {obsbiasin_file}")
+                    satlist.append((obsbiasin_file, satfile_name))
                 else:
                     logger.warning(f"{satfile_name} does not exist in {obsbiasout_path} or {obsbiasin_path}!")
 
@@ -495,9 +496,9 @@ class Jedi:
         logger.info(f"Creating bias correction tarball {tarball}")
         with tarfile.open(tarball, 'w') as bcor:
             logger.info(f"Adding {bcor.getnames()}")
-            for satfile in satlist:
-                logger.info(f"Adding satellite bias correction file {satfile} to {tarball}")
-                bcor.add(satfile, arcname=os.path.basename(satfile))
+            for satfile, arcname in satlist:
+                logger.info(f"Adding satellite bias correction file {satfile} as {arcname} to {tarball}")
+                bcor.add(satfile, arcname=arcname)
             for tlapfile in tlaplist:
                 # Change GPREFIX to APREFIX in tlapse file name when adding to tarball
                 tlapfile_rename = tlapfile.replace(self.jcb_config[f"{self.component}_obsbiasin_prefix"],
